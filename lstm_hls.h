@@ -40,8 +40,8 @@ void lstm(const T input[INPUT_SIZE],T state[LSTM_SIZE], T output[LSTM_SIZE], con
 	add<LSTM_SIZE * 4>(out1, out2, BIAS, gates);
 
 	for(int i=0;i<LSTM_SIZE;i++){
-		state[i] = sigmoid(gates[LSTM_SIZE + i]) * state[i] + sigmoid(gates[i])+ tanh(gates[LSTM_SIZE*2 + i]);
-		output[i] = sigmoid(gates[LSTM_SIZE*3 + i]) * tanh(state[i]);
+		state[i] = sigmoid(gates[LSTM_SIZE + i]) * state[i] + sigmoid(gates[i])* std::tanh(gates[LSTM_SIZE*2 + i]);
+		output[i] = sigmoid(gates[LSTM_SIZE*3 + i]) * std::tanh(state[i]);
 	}
 }
 

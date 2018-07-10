@@ -4,3 +4,4 @@
 #define Infrared_In_Size 16
 #define Output_Size 2
 #define DataSize 393
+typedef double DataType;

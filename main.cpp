@@ -4,16 +4,16 @@ using namespace std;
 #include "params.h"
 
 extern 
-void position(const float sensors[DataSize][Capa_In_Size+Infrared_In_Size], float p[DataSize][Output_Size]);
+void position(const DataType sensors[DataSize][Capa_In_Size+Infrared_In_Size], DataType p[DataSize][Output_Size]);
 
 int main(){
 
-	const	float sensors[DataSize][20]={
+	const	DataType sensors[DataSize][20]={
 #include "sensor_input.txt"
 	};
-	float pos[DataSize][2];
-	const float ref[DataSize][2]={
-#include "position.txt"
+	DataType pos[DataSize][2];
+	const DataType ref[DataSize][2]={
+#include "outputs.txt"
 	};
 	position(sensors,pos);
 	int err = 0;

@@ -1,5 +1,7 @@
 #include "lstm_hls.h"
 #include "params.h"
+#include "hls_stream.h"
+
 void position(const DataType input[DataSize][Capa_In_Size + Infrared_In_Size],
 		DataType p[DataSize][Output_Size]){
 #pragma HLS INTERFACE m_axi depth=393*20 port=input bundle=gmem
@@ -28,13 +30,9 @@ void position(const DataType input[DataSize][Capa_In_Size + Infrared_In_Size],
 #include "expr_4.txt"
 	};
 
-	DataType state[LSTM_SIZE] = {0
-	};
-
-	for(int i=0; i< DataSize;i++){
 #pragma HLS DATAFLOW
-		DataType output[LSTM_SIZE];
-		lstm<InputSize, LSTM_SIZE>(input[i], state, output, BiasS, WI, WS);
-		feed_forward<LSTM_SIZE, Output_Size>(output, p[i], W1, Bias1);
-	}
+	hls::stream<DataType> out_stream;
+#pragma HLS STREAM variable=out_stream depth=LSTM_SIZE dim=1
+	lstm<InputSize, LSTM_SIZE>(input, out_stream, BiasS, WI, WS,DataSize);
+	feed_forward<LSTM_SIZE, Output_Size>(out_stream, p, W1, Bias1,DataSize);
 }

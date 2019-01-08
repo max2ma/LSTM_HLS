@@ -3,10 +3,12 @@
 #include "hls_stream.h"
 template<typename T>
 const T sigmoid(const T value){
+#pragma HLS INLINE
 	return T(1)/(T(1) + expf(-value));
 }
 template<typename T>
 const T tanh(const T value){
+#pragma HLS INLINE
 	T v2 = expf(2*value);
 	return (v2-T(1))/(T(1) + v2);
 }
@@ -31,10 +33,8 @@ void matMul_lstm(const T w[W][H<<2], const T v[W], T o[H<<2]){
 #if 1
 template<int H, int W, typename T>
 void matMul(const T w[W][H], const T v[W], T o[H]){
-//#pragma HLS ARRAY_PARTITION variable=w complete dim=2
-//#pragma HLS ARRAY_PARTITION variable=o complete dim=1
 	for(int i=0;i<H;i++)
-#pragma HLS UNROLL
+#pragma HLS PIPELINE
 		o[i] = T(0);
 	for(int j=0;j<W;j++){
 		T tmp = v[j];
@@ -73,42 +73,6 @@ void add(const T a0[N], const T a1[N], const T a2[N], T a3[N]){
 		a3[i] = a0[i] + a1[i] + a2[i];
 }
 
-template<int LSTM_SIZE, typename T>
-void gate_operation(T out1[LSTM_SIZE * 4], T out2[LSTM_SIZE * 4],
-		const T BIAS[LSTM_SIZE * 4],
-		T hidden[LSTM_SIZE],
-		hls::stream<T>& output) {
-	static T state[LSTM_SIZE] = {0};
-#pragma HLS ALLOCATION instances=tanhf limit=1 operation
-	for (int i = 0; i < LSTM_SIZE; i++) {
-#pragma HLS PIPELINE
-		T g0 = out1[i] + out2[i] + BIAS[i];
-		T g1 = out1[LSTM_SIZE + i] + out2[LSTM_SIZE + i] + BIAS[LSTM_SIZE + i];
-		T g2 = out1[2 * LSTM_SIZE + i] + out2[2 * LSTM_SIZE + i]
-				+ BIAS[2 * LSTM_SIZE + i];
-		T g3 = out1[3 * LSTM_SIZE + i] + out2[3 * LSTM_SIZE + i]
-				+ BIAS[3 * LSTM_SIZE + i];
-		T s = sigmoid(g1) * state[i] + sigmoid(g0) * tanh(g2);
-		state[i] = s;
-		hidden[i] = sigmoid(g3) * tanh(s);
-		output.write(hidden[i]);
-	}
-}
-
-template<int LSTM_SIZE, int INPUT_SIZE, typename T>
-void lstm_dataflow(const T WI[INPUT_SIZE][LSTM_SIZE * 4], const T input[INPUT_SIZE],
-		const int rep,  const T WS[LSTM_SIZE][LSTM_SIZE * 4],
-		const T hidden[LSTM_SIZE],	const T BIAS[LSTM_SIZE * 4],
-		T out[LSTM_SIZE],
-		hls::stream<T>& output) {
-#pragma HLS DATAFLOW
-	T out1[LSTM_SIZE * 4];
-	T out2[LSTM_SIZE * 4];
-	matMul_lstm<LSTM_SIZE, INPUT_SIZE>(WI, input, out1);
-	matMul_lstm<LSTM_SIZE, LSTM_SIZE>(WS, hidden, out2);
-	gate_operation<LSTM_SIZE>(out1, out2, BIAS, out, output);
-}
-
 template<int INPUT_SIZE, int LSTM_SIZE, typename T>
 void lstm(const T input[][INPUT_SIZE],
 		hls::stream<T> &output,
@@ -117,16 +81,48 @@ void lstm(const T input[][INPUT_SIZE],
 		const T WS[LSTM_SIZE][LSTM_SIZE * 4],
 		const int REP){
 #pragma HLS ARRAY_PARTITION variable=BIAS block factor=2
+#pragma HLS ARRAY_PARTITION variable=WI block factor=2 dim=1
+#pragma HLS ARRAY_PARTITION variable=WI complete dim=2
+#pragma HLS ARRAY_PARTITION variable=WS block factor=2 dim=1
+#pragma HLS ARRAY_PARTITION variable=WS complete dim=2
+	T state[LSTM_SIZE] = {0};
 	T hidden[LSTM_SIZE] = {0};
-
-	T gates[LSTM_SIZE * 4];
-#pragma HLS ARRAY_PARTITION variable=gates block factor=2
-
-	T out[LSTM_SIZE];
+#pragma HLS ARRAY_PARTITION variable=hidden complete dim=1
 	for(int rep=0; rep<REP;rep++){
-		lstm_dataflow<LSTM_SIZE, INPUT_SIZE>(WI, input[rep], rep, WS,
-				hidden, BIAS, out, output);
-		for(int i=0;i<LSTM_SIZE;i++)
+		T in[INPUT_SIZE];
+#pragma HLS ARRAY_PARTITION variable=in complete dim=1
+		T out[LSTM_SIZE];
+#pragma HLS ARRAY_PARTITION variable=out complete dim=1
+		for(int i =0;i<INPUT_SIZE;i++)
+#pragma HLS PIPELINE
+			in[i]=input[rep][i];
+
+		for(int i = 0; i < LSTM_SIZE; i++) {
+#pragma HLS PIPELINE
+			T g0 = BIAS[i];
+			T g1 = BIAS[1 * LSTM_SIZE + i];
+			T g2 = BIAS[2 * LSTM_SIZE + i];
+			T g3 = BIAS[3 * LSTM_SIZE + i];
+			for(int j=0;j<INPUT_SIZE;j++){
+				g0 +=WI[j][i + (LSTM_SIZE * 0)] * in[j];
+				g1 +=WI[j][i + (LSTM_SIZE * 1)] * in[j];
+				g2 +=WI[j][i + (LSTM_SIZE * 2)] * in[j];
+				g3 +=WI[j][i + (LSTM_SIZE * 3)] * in[j];
+			}
+			for(int j=0;j<LSTM_SIZE;j++){
+				g0 +=WS[j][i + (LSTM_SIZE * 0)] * hidden[j];
+				g1 +=WS[j][i + (LSTM_SIZE * 1)] * hidden[j];
+				g2 +=WS[j][i + (LSTM_SIZE * 2)] * hidden[j];
+				g3 +=WS[j][i + (LSTM_SIZE * 3)] * hidden[j];
+			}
+
+#pragma HLS ALLOCATION instances=fexp limit=1 operation
+			T s = sigmoid(g1) * state[i] + sigmoid(g0) * tanh(g2);
+			state[i] = s;
+			out[i] = sigmoid(g3) * tanh(s);
+			output.write(out[i]);
+		}
+		for(int i = 0; i < LSTM_SIZE; i++)
 #pragma HLS PIPELINE
 			hidden[i] = out[i];
 	}

@@ -74,7 +74,7 @@ void add(const T a0[N], const T a1[N], const T a2[N], T a3[N]){
 }
 
 template<int INPUT_SIZE, int LSTM_SIZE, typename T>
-void lstm(const T input[][INPUT_SIZE],
+void lstm(const T (*input)[INPUT_SIZE],
 		hls::stream<T> &output,
 		const T BIAS[LSTM_SIZE * 4],
 		const T WI[INPUT_SIZE][LSTM_SIZE * 4],
@@ -88,15 +88,15 @@ void lstm(const T input[][INPUT_SIZE],
 	T state[LSTM_SIZE] = {0};
 	T hidden[LSTM_SIZE] = {0};
 #pragma HLS ARRAY_PARTITION variable=hidden complete dim=1
-	for(int rep=0; rep<REP;rep++){
-		T in[INPUT_SIZE];
+	T in[INPUT_SIZE];
 #pragma HLS ARRAY_PARTITION variable=in complete dim=1
 		T out[LSTM_SIZE];
 #pragma HLS ARRAY_PARTITION variable=out complete dim=1
+	for(int rep=0; rep<REP;rep++){
+
 		for(int i =0;i<INPUT_SIZE;i++)
 #pragma HLS PIPELINE
 			in[i]=input[rep][i];
-
 		for(int i = 0; i < LSTM_SIZE; i++) {
 #pragma HLS PIPELINE
 			T g0 = BIAS[i];
@@ -122,16 +122,16 @@ void lstm(const T input[][INPUT_SIZE],
 			out[i] = sigmoid(g3) * tanh(s);
 			output.write(out[i]);
 		}
-		for(int i = 0; i < LSTM_SIZE; i++)
+		for(int j = 0; j < LSTM_SIZE; j++)
 #pragma HLS PIPELINE
-			hidden[i] = out[i];
+			hidden[j] = out[j];
 	}
 }
 
 
 template<int INPUT_SIZE, int OUTPUT_SIZE, typename T>
 void feed_forward(hls::stream<T> &in,
-		T output[][OUTPUT_SIZE],
+		T (*output)[OUTPUT_SIZE],
 		const T W1[INPUT_SIZE][OUTPUT_SIZE],
 		const T BIAS1[OUTPUT_SIZE],
 		const int REP){

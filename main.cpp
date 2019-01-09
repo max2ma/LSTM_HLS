@@ -4,7 +4,7 @@ using namespace std;
 #include "params.h"
 
 extern 
-void position(const DataType sensors[DataSize][Capa_In_Size+Infrared_In_Size], DataType p[DataSize][Output_Size]);
+void position(const int Samples, const DataType (*input)[InputSize], DataType  (*p)[Output_Size]);
 
 int main(){
 
@@ -15,9 +15,10 @@ int main(){
 	const DataType ref[DataSize][2]={
 #include "outputs.txt"
 	};
-	position(sensors,pos);
+	int Samples = 25;
+	position(Samples, sensors,pos);
 	int err = 0;
-	for(int i=0;i<DataSize;i++)
+	for(int i=0;i<Samples;i++)
 		for(int j=0;j<2;j++){
 			if(fabs(pos[i][j]/ref[i][j] -1) > 0.01){
 				cout <<"pos["<<i<<"]["<<j<<"]="<<pos[i][j]<<'\t'

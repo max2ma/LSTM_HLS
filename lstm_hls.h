@@ -3,14 +3,20 @@
 #include "hls_stream.h"
 template<typename T>
 const T sigmoid(const T value){
-#pragma HLS INLINE
-	return T(1)/(T(1) + expf(-value));
+	T v = expf(-value);
+//#pragma HLS RESOURCE variable=v core=Fexp_nodsp
+	T r = T(1)/(T(1) + v);
+//#pragma HLS RESOURCE variable=r core=FRecip_nodsp
+//#pragma HLS RESOURCE variable=r core=FAddSub_nodsp
+	return r;
 }
 template<typename T>
 const T tanh(const T value){
-#pragma HLS INLINE
 	T v2 = expf(2*value);
-	return (v2-T(1))/(T(1) + v2);
+//#pragma HLS RESOURCE variable=v2 core=Fexp_nodsp
+	T r = (v2-T(1))/(T(1) + v2);
+//#pragma HLS RESOURCE variable=r core=FRecip_nodsp
+//#pragma HLS RESOURCE variable=r core=FAddSub_nodsp
 }
 
 template<int H, int W, typename T>
@@ -30,31 +36,38 @@ void matMul_lstm(const T w[W][H<<2], const T v[W], T o[H<<2]){
 				o[(i<<2) + k]+=w[j][(i<<2)+k] * r;
 	}
 }
-#if 1
-template<int H, int W, typename T>
-void matMul(const T w[W][H], const T v[W], T o[H]){
+#if 0
+template<int H, int W, int PE, typename T>
+void matMulAdd(const T w[W][H], const T v[W], const T bias[H], T o[H]){
+	T tmp_o[H];
+#pragma HLS ALLOCATION instances=fmul limit=PE operation
 	for(int i=0;i<H;i++)
 #pragma HLS PIPELINE
-		o[i] = T(0);
+		tmp_o[i] = bias[i];
 	for(int j=0;j<W;j++){
-		T tmp = v[j];
-		for(int i=0;i<H;i++)
 #pragma HLS PIPELINE
-			o[i]+=w[j][i] * tmp;
+		T tmp_in = v[j];
+		for(int i=0;i<H;i++)
+			tmp_o[i]+=w[j][i] * tmp_in;
 	}
+	for(int i=0;i<H;i++)
+#pragma HLS PIPELINE
+		o[i] = tmp_o[i];
 }
 #else
-template<int H, int W, typename T>
-void matMul(const T w[W][H], const T v[W], T o[H]){
+
+template<int H, int W, int PE, typename T>
+void matMulAdd(const T w[W][H], const T v[W], const T bias[H], T o[H]){
 #pragma HLS ARRAY_PARTITION variable=w complete dim=1
 #pragma HLS ARRAY_PARTITION variable=v complete dim=1
-
+	T tmp_o[H];
+#pragma HLS ALLOCATION instances=fmul limit=PE operation
 	for(int i=0;i<H;i++){
 #pragma HLS PIPELINE
-		T tmp = 0;
+		T tmp_o = bias[i];
 		for(int j=0;j<W;j++)
-			tmp+=w[j][i] * v[i];
-		o[i] = tmp;
+			tmp_o+=w[j][i] * v[j];
+		o[i] = tmp_o;
 	}
 }
 #endif
@@ -85,8 +98,8 @@ void lstm(const T (*input)[INPUT_SIZE],
 #pragma HLS ARRAY_PARTITION variable=WI complete dim=2
 #pragma HLS ARRAY_PARTITION variable=WS block factor=2 dim=1
 #pragma HLS ARRAY_PARTITION variable=WS complete dim=2
-	T state[LSTM_SIZE] = {0};
-	T hidden[LSTM_SIZE] = {0};
+	static T state[LSTM_SIZE] = {0};
+	static T hidden[LSTM_SIZE] = {0};
 #pragma HLS ARRAY_PARTITION variable=hidden complete dim=1
 	T in[INPUT_SIZE];
 #pragma HLS ARRAY_PARTITION variable=in complete dim=1
@@ -98,7 +111,7 @@ void lstm(const T (*input)[INPUT_SIZE],
 #pragma HLS PIPELINE
 			in[i]=input[rep][i];
 		for(int i = 0; i < LSTM_SIZE; i++) {
-#pragma HLS PIPELINE
+#pragma HLS PIPELINE II = 4
 			T g0 = BIAS[i];
 			T g1 = BIAS[1 * LSTM_SIZE + i];
 			T g2 = BIAS[2 * LSTM_SIZE + i];
@@ -116,7 +129,7 @@ void lstm(const T (*input)[INPUT_SIZE],
 				g3 +=WS[j][i + (LSTM_SIZE * 3)] * hidden[j];
 			}
 
-#pragma HLS ALLOCATION instances=fexp limit=1 operation
+//#pragma HLS ALLOCATION instances=fexp limit=1 operation
 			T s = sigmoid(g1) * state[i] + sigmoid(g0) * tanh(g2);
 			state[i] = s;
 			out[i] = sigmoid(g3) * tanh(s);
@@ -136,15 +149,15 @@ void feed_forward(hls::stream<T> &in,
 		const T BIAS1[OUTPUT_SIZE],
 		const int REP){
 #pragma HLS INLINE off
-	T tmp[OUTPUT_SIZE];
-	T input[INPUT_SIZE];
 	for(int rep=0; rep<REP; rep++){
 #pragma HLS DATAFLOW
+		T input[INPUT_SIZE];
 		for(int i=0;i<INPUT_SIZE;i++)
 #pragma HLS PIPELINE
 			input[i] = in.read();
-		matMul<OUTPUT_SIZE, INPUT_SIZE>(W1, input, tmp);
-		add<OUTPUT_SIZE>(tmp, BIAS1, output[rep]);
+//		T tmp[OUTPUT_SIZE];
+		matMulAdd<OUTPUT_SIZE, INPUT_SIZE, 4>(W1, input, BIAS1, output[rep]);
+//		add<OUTPUT_SIZE>(tmp, BIAS1, output[rep]);
 	}
 }
 

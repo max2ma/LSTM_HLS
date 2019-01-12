@@ -57,7 +57,7 @@ void matMulAdd(const T w[W][H], const T v[W], const T bias[H], T o[H]){
 #else
 
 template<int H, int W, int PE, typename T>
-void matMulAdd(const T w[W][H], const T v[W], const T bias[H], T o[H]){
+void matMulAdd(const T w[W][H], const T v[W], const T bias[H], T *o){
 #pragma HLS ARRAY_PARTITION variable=w complete dim=1
 #pragma HLS ARRAY_PARTITION variable=v complete dim=1
 	T tmp_o[H];
@@ -87,17 +87,17 @@ void add(const T a0[N], const T a1[N], const T a2[N], T a3[N]){
 }
 
 template<int INPUT_SIZE, int LSTM_SIZE, typename T>
-void lstm(const T (*input)[INPUT_SIZE],
+void lstm(const T *input,
 		hls::stream<T> &output,
 		const T BIAS[LSTM_SIZE * 4],
 		const T WI[INPUT_SIZE][LSTM_SIZE * 4],
 		const T WS[LSTM_SIZE][LSTM_SIZE * 4],
-		const int REP){
+		const int Samples){
 #pragma HLS ARRAY_PARTITION variable=BIAS block factor=2
-#pragma HLS ARRAY_PARTITION variable=WI block factor=2 dim=1
-#pragma HLS ARRAY_PARTITION variable=WI complete dim=2
-#pragma HLS ARRAY_PARTITION variable=WS block factor=2 dim=1
-#pragma HLS ARRAY_PARTITION variable=WS complete dim=2
+#pragma HLS ARRAY_PARTITION variable=WI block factor=2 dim=2
+//#pragma HLS ARRAY_PARTITION variable=WI complete dim=2
+#pragma HLS ARRAY_PARTITION variable=WS block factor=2 dim=2
+//#pragma HLS ARRAY_PARTITION variable=WS complete dim=2
 	static T state[LSTM_SIZE] = {0};
 	static T hidden[LSTM_SIZE] = {0};
 #pragma HLS ARRAY_PARTITION variable=hidden complete dim=1
@@ -105,11 +105,12 @@ void lstm(const T (*input)[INPUT_SIZE],
 #pragma HLS ARRAY_PARTITION variable=in complete dim=1
 		T out[LSTM_SIZE];
 #pragma HLS ARRAY_PARTITION variable=out complete dim=1
-	for(int rep=0; rep<REP;rep++){
+	for(int rep=0; rep<Samples;rep++){
 
-		for(int i =0;i<INPUT_SIZE;i++)
+		int start_point = rep * INPUT_SIZE;
+		for(int i = 0;i<INPUT_SIZE;i++)
 #pragma HLS PIPELINE
-			in[i]=input[rep][i];
+			in[i]=input[start_point+i];
 		for(int i = 0; i < LSTM_SIZE; i++) {
 #pragma HLS PIPELINE II = 4
 			T g0 = BIAS[i];
@@ -144,19 +145,19 @@ void lstm(const T (*input)[INPUT_SIZE],
 
 template<int INPUT_SIZE, int OUTPUT_SIZE, typename T>
 void feed_forward(hls::stream<T> &in,
-		T (*output)[OUTPUT_SIZE],
+		T *output,
 		const T W1[INPUT_SIZE][OUTPUT_SIZE],
 		const T BIAS1[OUTPUT_SIZE],
-		const int REP){
+		const int Samples){
 #pragma HLS INLINE off
-	for(int rep=0; rep<REP; rep++){
+	for(int rep=0; rep<Samples; rep++){
 #pragma HLS DATAFLOW
 		T input[INPUT_SIZE];
 		for(int i=0;i<INPUT_SIZE;i++)
 #pragma HLS PIPELINE
 			input[i] = in.read();
 //		T tmp[OUTPUT_SIZE];
-		matMulAdd<OUTPUT_SIZE, INPUT_SIZE, 4>(W1, input, BIAS1, output[rep]);
+		matMulAdd<OUTPUT_SIZE, INPUT_SIZE, 4>(W1, input, BIAS1, output+ rep * OUTPUT_SIZE);
 //		add<OUTPUT_SIZE>(tmp, BIAS1, output[rep]);
 	}
 }

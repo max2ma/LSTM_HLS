@@ -4,19 +4,19 @@
 template<typename T>
 const T sigmoid(const T value){
 	T v = expf(-value);
-#pragma HLS RESOURCE variable=v core=Fexp_nodsp
+//#pragma HLS RESOURCE variable=v core=Fexp_nodsp
 	T r = T(1)/(T(1) + v);
-#pragma HLS RESOURCE variable=r core=FRecip_nodsp
-#pragma HLS RESOURCE variable=r core=FAddSub_nodsp
+//#pragma HLS RESOURCE variable=r core=FRecip_nodsp
+//#pragma HLS RESOURCE variable=r core=FAddSub_nodsp
 	return r;
 }
 template<typename T>
 const T tanh(const T value){
 	T v2 = expf(2*value);
-#pragma HLS RESOURCE variable=v2 core=Fexp_nodsp
+//#pragma HLS RESOURCE variable=v2 core=Fexp_nodsp
 	T r = (v2-T(1))/(T(1) + v2);
-#pragma HLS RESOURCE variable=r core=FRecip_nodsp
-#pragma HLS RESOURCE variable=r core=FAddSub_nodsp
+//#pragma HLS RESOURCE variable=r core=FRecip_nodsp
+//#pragma HLS RESOURCE variable=r core=FAddSub_nodsp
 }
 
 #if 0

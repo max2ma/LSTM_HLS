@@ -1,6 +1,6 @@
 open_project "hls_lstm"
 set_top position
-add_files src/lstm_sensor.cpp -cflags "-Wno-unknown-pragmas -I weights/ -I srcs/"
+add_files srcs/lstm_sensor.cpp -cflags "-Wno-unknown-pragmas -I weights/ -I srcs/"
 add_files -tb testbench/main.cpp -cflags "-Wno-unknown-pragmas -I srcs/ -I weights/" 
 open_solution -reset "origin"
 set_part {xc7z020clg400-1}
